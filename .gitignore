@@ -1,0 +1,6 @@
+target/
+*.md
+*.svg
+*.txt
+.claude/
+plugins/
