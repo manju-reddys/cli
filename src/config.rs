@@ -67,6 +67,9 @@ pub struct PluginManifest {
   pub source: String,
   /// BLAKE3 hash of the plugin binary, hex-encoded.
   pub source_hash: String,
+  /// Plugin version from `craft.config.yaml`, if present.
+  #[serde(default)]
+  pub version: Option<String>,
   /// Env var keys the plugin expects (values stored in OS keychain).
   #[serde(default)]
   pub env_vars: Vec<String>,

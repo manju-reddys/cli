@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Subcommand;
 
 pub mod build;
+pub mod craft_config;
 pub mod install;
 pub mod list;
 pub mod new;

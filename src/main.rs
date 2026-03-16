@@ -1,4 +1,5 @@
 mod auth;
+mod cache;
 mod cli;
 mod ui;
 mod config;

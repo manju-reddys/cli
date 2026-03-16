@@ -273,6 +273,24 @@ async fn handle_connection(
           state.loaded_modules.fetch_add(1, Ordering::Relaxed);
         }
       }
+
+      // Trigger AOT compilation in the background for WASM plugins so the
+      // first `craft mcp run` is instant instead of paying the ~12 s compile.
+      #[cfg(feature = "daemon")]
+      {
+        use crate::config::{PluginKind, PluginManifest};
+        if matches!(PluginManifest::load(&plugin).map(|m| m.kind), Ok(PluginKind::Wasm)) {
+          let engine = state.engine.engine.clone();
+          let plugin_name = plugin.clone();
+          tokio::spawn(async move {
+            match crate::daemon::engine::wasm::load_component(&engine, &plugin_name) {
+              Ok(_) => tracing::info!(plugin = plugin_name, "AOT compilation complete"),
+              Err(e) => tracing::warn!(plugin = plugin_name, error = %e, "AOT compilation failed"),
+            }
+          });
+        }
+      }
+
       let resp = ipc_proto::IpcResponse::HotReloaded;
       let frame = ipc_proto::encode_response(&resp)?;
       stream.write_all(&frame).await?;

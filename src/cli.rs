@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::{auth, config, daemon, github, mcp, proxy, ui};
+use crate::{auth, cache, config, daemon, github, mcp, proxy, ui};
 
 /// craft — MCP host and API proxy CLI
 #[derive(Parser)]
@@ -48,6 +48,12 @@ pub enum Command {
     #[command(subcommand)]
     cmd: Option<ConfigCommand>,
   },
+
+  /// Manage the AOT compilation cache
+  Cache {
+    #[command(subcommand)]
+    cmd: CacheCommand,
+  },
 }
 
 #[derive(Subcommand)]
@@ -56,6 +62,15 @@ pub enum ConfigCommand {
   Show,
   /// Set a config value (e.g. daemon.idle_timeout_secs=600)
   Set { kv: String },
+}
+
+#[derive(Subcommand)]
+pub enum CacheCommand {
+  /// Remove compiled .cwasm file(s); plugin will recompile on next run
+  Clean {
+    /// Plugin name (omit to clean all)
+    plugin: Option<String>,
+  },
 }
 
 impl Craft {
@@ -67,6 +82,9 @@ impl Craft {
       Command::Proxy { cmd } => cmd.run().await,
       Command::Daemon { cmd } => cmd.run().await,
       Command::Config { cmd } => run_config(cmd).await,
+      Command::Cache { cmd } => match cmd {
+        CacheCommand::Clean { plugin } => cache::clean(plugin.as_deref()).await,
+      },
     }
   }
 }

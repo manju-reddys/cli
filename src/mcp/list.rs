@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::config::{PluginKind, PluginManifest};
+use crate::config::{cache_dir, plugin_dir, PluginKind, PluginManifest};
 use crate::ui;
 
-/// List all installed plugins with name, kind, source, and hash.
+/// List all installed plugins with name, kind, version, cache status, and source.
 pub async fn list() -> Result<()> {
   let manifests = PluginManifest::list_installed()?;
 
@@ -13,22 +13,41 @@ pub async fn list() -> Result<()> {
     return Ok(());
   }
 
-  ui::table_header(&[("NAME", 20), ("KIND", 6), ("SOURCE", 40), ("HASH", 12)]);
+  ui::table_header(&[("NAME", 20), ("KIND", 6), ("VERSION", 12), ("CACHED", 6), ("SOURCE", 36)]);
 
   for m in &manifests {
     let kind_str = match m.kind {
       PluginKind::Wasm => "wasm",
       PluginKind::Js => "js",
     };
-    let hash_short = if m.source_hash.len() >= 12 { &m.source_hash[..12] } else { &m.source_hash };
-    // Truncate on char boundaries to avoid panicking on non-ASCII paths.
-    let source_short = if m.source.chars().count() > 38 {
-      let tail: String = m.source.chars().rev().take(37).collect::<String>().chars().rev().collect();
+
+    let version = m.version.as_deref().unwrap_or("—");
+
+    // A .cwasm file in the plugin dir means AOT compilation is done.
+    let cached = match m.kind {
+      PluginKind::Wasm => {
+        let cwasm = plugin_dir(&m.name).join("plugin.cwasm");
+        if cwasm.exists() { "yes" } else { "no" }
+      }
+      // JS uses the cache dir for pre-parsed bytecode (optional)
+      PluginKind::Js => {
+        let js_cache = cache_dir().join(format!("{}.jsc", m.name));
+        if js_cache.exists() { "yes" } else { "no" }
+      }
+    };
+
+    let source_short = if m.source.chars().count() > 34 {
+      let tail: String =
+        m.source.chars().rev().take(33).collect::<String>().chars().rev().collect();
       format!("…{tail}")
     } else {
       m.source.clone()
     };
-    println!("{:<20} {:<6} {:<40} {:<12}", m.name, kind_str, source_short, hash_short);
+
+    println!(
+      "{:<20} {:<6} {:<12} {:<6} {:<36}",
+      m.name, kind_str, version, cached, source_short
+    );
   }
 
   println!("\n{} plugin(s) installed.", manifests.len());
