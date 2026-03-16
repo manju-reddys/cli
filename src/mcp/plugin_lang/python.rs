@@ -412,16 +412,16 @@ pub fn scaffold(name: &str) -> Result<()> {
     write_file(dir.join(".gitignore"),       GITIGNORE)?;
 
     // ── 4. Print next steps ───────────────────────────────────────────────
-    println!("\n✓  {name}/ created");
-    println!("\nNext steps:");
-    println!("  1. cd {name}");
-    println!("  2. python3 -m venv .venv && source .venv/bin/activate");
+    crate::ui::success(format!("{name}/ created"));
+    crate::ui::section("Next steps");
+    crate::ui::hint(format!("1. cd {name}"));
+    crate::ui::hint("2. python3 -m venv .venv && source .venv/bin/activate");
     if use_fastmcp {
-        println!("  3. pip install componentize-py mcp anyio");
+        crate::ui::hint("3. pip install componentize-py mcp anyio");
     } else {
-        println!("  3. pip install componentize-py");
+        crate::ui::hint("3. pip install componentize-py");
     }
-    println!("  4. craft mcp build");
+    crate::ui::hint("4. craft mcp build");
 
     Ok(())
 }
@@ -482,18 +482,18 @@ pub fn analyse(dir: &Path) -> Result<Vec<Finding>> {
 /// Build/compile the Python plugin in `dir` to `<name>.wasm`.
 pub fn build(dir: &Path, name: &str) -> Result<()> {
     // ── Locate componentize-py ────────────────────────────────────────────
-    println!("\nLocating componentize-py…");
+    crate::ui::section("Locating componentize-py");
 
     enum Mode { Direct, PythonModule, Uv }
 
     let mode = if cmd_exists("componentize-py") {
-        println!("  Found: componentize-py");
+        crate::ui::step("Found: componentize-py");
         Mode::Direct
     } else if cmd_check("python3", &["-m", "componentize_py", "--version"]) {
-        println!("  Found: python3 -m componentize_py");
+        crate::ui::step("Found: python3 -m componentize_py");
         Mode::PythonModule
     } else if cmd_exists("uv") {
-        println!("  Found: uv run componentize-py");
+        crate::ui::step("Found: uv run componentize-py");
         Mode::Uv
     } else {
         bail!(
@@ -509,7 +509,7 @@ pub fn build(dir: &Path, name: &str) -> Result<()> {
 
     // ── Run componentize-py ───────────────────────────────────────────────
     let wasm_out = format!("{name}.wasm");
-    println!("Compiling {name} → {wasm_out}…");
+    crate::ui::info(format!("Compiling {name} → {wasm_out}"));
 
     let cp_args: &[&str] = &["-d", "wit", "-w", "mcp:plugin/plugin",
                                "componentize", "wasm_entry", "-o", &wasm_out];
@@ -545,7 +545,7 @@ pub fn build(dir: &Path, name: &str) -> Result<()> {
 
     // ── Optional wasm-tools verification ─────────────────────────────────
     if cmd_exists("wasm-tools") {
-        println!("Verifying component with wasm-tools…");
+        crate::ui::step("Verifying component with wasm-tools");
         let ok = Command::new("wasm-tools")
             .args(["component", "wit", &wasm_out])
             .current_dir(dir)
@@ -553,14 +553,14 @@ pub fn build(dir: &Path, name: &str) -> Result<()> {
             .map(|s| s.success())
             .unwrap_or(false);
         if ok {
-            println!("  Component interface verified.");
+            crate::ui::step("Component interface verified.");
         } else {
-            eprintln!("  WARN: wasm-tools verification failed — the .wasm may be malformed");
+            crate::ui::warn("wasm-tools verification failed — the .wasm may be malformed");
         }
     }
 
-    println!("\n✓  {wasm_out} ({kb} KB)");
-    println!("   Install with: craft mcp install {}", wasm_path.display());
+    crate::ui::success(format!("{wasm_out} ({kb} KB)"));
+    crate::ui::hint(format!("Install with: craft mcp install {}", wasm_path.display()));
     Ok(())
 }
 

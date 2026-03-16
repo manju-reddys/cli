@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::config::{self, PluginManifest};
+use crate::ui;
 
 /// Remove a plugin: delete its directory, notify daemon to evict, clean keychain.
 pub async fn remove(name: &str) -> Result<()> {
@@ -20,7 +21,7 @@ pub async fn remove(name: &str) -> Result<()> {
   std::fs::remove_dir_all(&plugin_dir)
     .with_context(|| format!("removing {}", plugin_dir.display()))?;
 
-  println!("✓ removed {name}");
+  ui::success(format!("removed {name}"));
 
   // Notify daemon to evict from cache
   if let Ok(mut stream) = crate::ipc::connect().await {
@@ -28,7 +29,7 @@ pub async fn remove(name: &str) -> Result<()> {
     let req = crate::ipc_proto::IpcRequest::Evict { plugin: name.to_string() };
     let frame = crate::ipc_proto::encode(&req)?;
     stream.write_all(&frame).await.ok();
-    println!("  ↻ notified daemon to evict {name}");
+    ui::detail(format!("notified daemon to evict {name}"));
   }
 
   Ok(())

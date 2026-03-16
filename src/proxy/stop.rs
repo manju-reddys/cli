@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::{ipc, ipc_proto};
+use crate::{ipc, ipc_proto, ui};
 
 pub async fn stop(name: &str) -> Result<()> {
     let mut stream = ipc::connect().await?;
@@ -19,7 +19,7 @@ pub async fn stop(name: &str) -> Result<()> {
     let resp: ipc_proto::IpcResponse = serde_json::from_slice(&json_buf)?;
     match resp {
         ipc_proto::IpcResponse::ProxyStopped => {
-            println!("proxy '{name}' stopped");
+            ui::success(format!("proxy '{name}' stopped"));
         }
         ipc_proto::IpcResponse::Error { detail, .. } => {
             anyhow::bail!("{detail}");

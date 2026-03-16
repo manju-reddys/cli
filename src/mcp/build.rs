@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 use super::plugin_lang;
+use crate::ui;
 
 pub async fn run(dir: Option<&Path>) -> Result<()> {
     // ── 1. Resolve working dir ────────────────────────────────────────────
@@ -11,7 +12,7 @@ pub async fn run(dir: Option<&Path>) -> Result<()> {
         Some(d) => d.to_path_buf(),
         None    => std::env::current_dir().context("getting current directory")?,
     };
-    println!("Building in {}", dir.display());
+    ui::info(format!("Building in {}", dir.display()));
 
     // ── 2. Detect language ────────────────────────────────────────────────
     let lang = plugin_lang::detect(&dir).ok_or_else(|| {
@@ -21,14 +22,14 @@ pub async fn run(dir: Option<&Path>) -> Result<()> {
             dir.display()
         )
     })?;
-    println!("Detected language: {lang}");
+    ui::step(format!("Detected language: {lang}"));
 
     // ── 3. Read plugin name ───────────────────────────────────────────────
     let name = plugin_lang::read_plugin_name(&dir)?;
-    println!("Plugin name: {name}");
+    ui::step(format!("Plugin name: {name}"));
 
     // ── 4. Static analysis ────────────────────────────────────────────────
-    println!("\nRunning static analysis…");
+    ui::section("Static analysis");
     let findings = plugin_lang::analyse(lang, &dir)?;
 
     let mut has_errors = false;
@@ -36,18 +37,16 @@ pub async fn run(dir: Option<&Path>) -> Result<()> {
         let rel = f.file.strip_prefix(&dir).unwrap_or(&f.file);
         if f.is_error {
             has_errors = true;
-            eprintln!("  ERROR {}:{}: {}\n         {}",
-                rel.display(), f.line_no, f.message, f.line.trim());
+            ui::error_finding(rel.display(), f.line_no, &f.message, &f.line);
         } else {
-            println!("  WARN  {}:{}: {}\n         {}",
-                rel.display(), f.line_no, f.message, f.line.trim());
+            ui::warn_finding(rel.display(), f.line_no, &f.message, &f.line);
         }
     }
     if has_errors {
         bail!("static analysis found errors — fix them before building");
     }
     if findings.is_empty() {
-        println!("  No issues found.");
+        ui::success("No issues found.");
     }
 
     // ── 5. Compile ────────────────────────────────────────────────────────

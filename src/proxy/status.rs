@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::{ipc, ipc_proto};
+use crate::{ipc, ipc_proto, ui};
 
 pub async fn status() -> Result<()> {
     let mut stream = ipc::connect().await?;
@@ -20,9 +20,9 @@ pub async fn status() -> Result<()> {
     match resp {
         ipc_proto::IpcResponse::Status(st) => {
             if st.running_proxies.is_empty() {
-                println!("no proxies running");
+                ui::info("no proxies running");
             } else {
-                println!("{:<24} {}", "PLUGIN", "PORT");
+                ui::table_header(&[("PLUGIN", 24), ("PORT", 6)]);
                 for p in &st.running_proxies {
                     println!("{:<24} {}", p.plugin, p.port);
                 }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::{auth, config, daemon, github, mcp, proxy};
+use crate::{auth, config, daemon, github, mcp, proxy, ui};
 
 /// craft — MCP host and API proxy CLI
 #[derive(Parser)]
@@ -75,10 +75,10 @@ async fn run_config(cmd: Option<ConfigCommand>) -> Result<()> {
   match cmd {
     None | Some(ConfigCommand::Show) => {
       let cfg = config::Config::load()?;
-      println!("{}", toml::to_string_pretty(&cfg)?);
+      ui::plain(toml::to_string_pretty(&cfg)?);
     }
     Some(ConfigCommand::Set { kv }) => {
-      println!("craft config set {kv}: not yet implemented");
+      ui::info(format!("craft config set {kv}: not yet implemented"));
     }
   }
   Ok(())

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::config::{self, PluginKind, PluginManifest};
+use crate::ui;
 
 /// Re-install a plugin from its registered source.
 ///
@@ -19,7 +20,7 @@ pub async fn update(name: &str) -> Result<()> {
   let new_hash = blake3::hash(&bytes).to_hex().to_string();
 
   if new_hash == manifest.source_hash {
-    println!("✓ {name} is already up to date");
+    ui::success(format!("{name} is already up to date"));
     return Ok(());
   }
 
@@ -35,7 +36,7 @@ pub async fn update(name: &str) -> Result<()> {
   let updated = PluginManifest { source_hash: new_hash, ..manifest };
   updated.save()?;
 
-  println!("✓ updated {name}");
+  ui::success(format!("updated {name}"));
 
   // Notify daemon
   if let Ok(mut stream) = crate::ipc::connect().await {
@@ -43,7 +44,7 @@ pub async fn update(name: &str) -> Result<()> {
     let req = crate::ipc_proto::IpcRequest::HotReload { plugin: name.to_string() };
     let frame = crate::ipc_proto::encode(&req)?;
     stream.write_all(&frame).await.ok();
-    println!("  ↻ notified daemon to hot-reload {name}");
+    ui::detail(format!("notified daemon to hot-reload {name}"));
   }
 
   Ok(())

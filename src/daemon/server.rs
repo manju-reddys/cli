@@ -569,7 +569,7 @@ pub async fn stop() -> Result<()> {
   let pid: u32 = pid_str.trim().parse().unwrap_or(0);
 
   if pid == 0 {
-    println!("craft daemon: no running daemon found");
+    crate::ui::info("craft daemon: not running");
     return Ok(());
   }
 
@@ -578,27 +578,27 @@ pub async fn stop() -> Result<()> {
     libc::kill(pid as libc::pid_t, libc::SIGTERM);
   }
 
-  println!("craft: sent SIGTERM to daemon (pid={pid})");
+  crate::ui::success(format!("sent SIGTERM to daemon (pid={pid})"));
   Ok(())
 }
 
 pub async fn status() -> Result<()> {
   let path = config::pid_path();
   if !path.exists() {
-    println!("craft daemon: not running");
+    crate::ui::info("craft daemon: not running");
     return Ok(());
   }
   let pid_str = std::fs::read_to_string(&path).unwrap_or_default();
   let pid: u32 = pid_str.trim().parse().unwrap_or(0);
   if pid == 0 || !crate::ipc::pid_is_alive(pid) {
-    println!("craft daemon: not running (stale PID file)");
+    crate::ui::info("craft daemon: not running (stale PID file)");
     return Ok(());
   }
   // connect via IPC and send Status request for uptime/module count
   let mut stream = match crate::ipc::connect().await {
     Ok(s) => s,
     Err(e) => {
-      println!("craft daemon: running (pid={pid}), but unreachable via IPC: {e}");
+      crate::ui::warn(format!("craft daemon: running (pid={pid}), but unreachable via IPC: {e}"));
       return Ok(());
     }
   };
@@ -610,7 +610,7 @@ pub async fn status() -> Result<()> {
 
   let mut len_buf = [0u8; 4];
   if stream.read_exact(&mut len_buf).await.is_err() {
-    println!("craft daemon: running (pid={pid}) - disconnected abruptly");
+    crate::ui::warn(format!("craft daemon: running (pid={pid}) - disconnected abruptly"));
     return Ok(());
   }
 
@@ -621,19 +621,19 @@ pub async fn status() -> Result<()> {
   let resp: ipc_proto::IpcResponse = serde_json::from_slice(&json_buf)?;
 
   if let ipc_proto::IpcResponse::Status(st) = resp {
-    println!("craft daemon: running");
-    println!("  PID: {}", st.pid);
-    println!("  Uptime: {}s", st.uptime_secs);
-    println!("  Active Connections: {}", st.active_connections);
-    println!("  Loaded Modules: {}", st.loaded_modules);
+    crate::ui::success("craft daemon: running");
+    crate::ui::kv("PID", st.pid);
+    crate::ui::kv("Uptime", format!("{}s", st.uptime_secs));
+    crate::ui::kv("Active Connections", st.active_connections);
+    crate::ui::kv("Loaded Modules", st.loaded_modules);
     if !st.running_proxies.is_empty() {
-      println!("  Running Proxies:");
+      crate::ui::kv("Running Proxies", "");
       for p in st.running_proxies {
-        println!("    - {} (port: {})", p.plugin, p.port);
+        println!("      {} (port: {})", p.plugin, p.port);
       }
     }
   } else {
-    println!("craft daemon: running (pid={pid}) - failed to get telemetry payload");
+    crate::ui::warn(format!("craft daemon: running (pid={pid}) - failed to get telemetry payload"));
   }
 
   Ok(())
@@ -642,7 +642,7 @@ pub async fn status() -> Result<()> {
 pub async fn logs() -> Result<()> {
   let log_file = config::log_path();
   if !log_file.exists() {
-    println!("craft daemon: no log file found at {}", log_file.display());
+    crate::ui::info(format!("craft daemon: no log file found at {}", log_file.display()));
     return Ok(());
   }
 
@@ -651,7 +651,7 @@ pub async fn logs() -> Result<()> {
   let lines: Vec<&str> = content.lines().collect();
   let start = if lines.len() > 50 { lines.len() - 50 } else { 0 };
   for line in &lines[start..] {
-    println!("{line}");
+    crate::ui::plain(line);
   }
   Ok(())
 }

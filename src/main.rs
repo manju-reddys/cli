@@ -1,5 +1,6 @@
 mod auth;
 mod cli;
+mod ui;
 mod config;
 mod daemon;
 mod error;

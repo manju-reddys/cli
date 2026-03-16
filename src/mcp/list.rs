@@ -1,20 +1,19 @@
 use anyhow::Result;
 
 use crate::config::{PluginKind, PluginManifest};
+use crate::ui;
 
 /// List all installed plugins with name, kind, source, and hash.
 pub async fn list() -> Result<()> {
   let manifests = PluginManifest::list_installed()?;
 
   if manifests.is_empty() {
-    println!("No plugins installed.");
-    println!("  Install one with: craft mcp install <path-to-plugin>");
+    ui::info("No plugins installed.");
+    ui::hint("Install one with: craft mcp install <path-to-plugin>");
     return Ok(());
   }
 
-  // Header
-  println!("{:<20} {:<6} {:<40} {:<12}", "NAME", "KIND", "SOURCE", "HASH");
-  println!("{}", "─".repeat(80));
+  ui::table_header(&[("NAME", 20), ("KIND", 6), ("SOURCE", 40), ("HASH", 12)]);
 
   for m in &manifests {
     let kind_str = match m.kind {

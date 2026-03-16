@@ -36,16 +36,16 @@ impl AuthCommand {
       AuthCommand::Credentials { cmd } => match cmd {
         CredentialsCommand::Set { plugin, key, value } => {
           keychain::set(&plugin, &key, &value)?;
-          println!("credential saved: {plugin}/{key}");
+          crate::ui::success(format!("credential saved: {plugin}/{key}"));
           Ok(())
         }
         CredentialsCommand::Delete { plugin, key } => {
           keychain::delete(&plugin, &key)?;
-          println!("credential deleted: {plugin}/{key}");
+          crate::ui::success(format!("credential deleted: {plugin}/{key}"));
           Ok(())
         }
         CredentialsCommand::List { plugin } => {
-          println!("Credentials for plugin '{plugin}': (list not yet implemented)");
+          crate::ui::info(format!("Credentials for plugin '{plugin}': (list not yet implemented)"));
           Ok(())
         }
       },

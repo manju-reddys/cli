@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::config::{self, PluginKind, PluginManifest};
+use crate::ui;
 
 // https://webassembly.github.io/spec/core/binary/modules.html#binary-module
 /// WASM magic bytes: `\0asm`
@@ -65,7 +66,7 @@ pub async fn install(source: &str) -> Result<()> {
   };
   manifest.save()?;
 
-  println!("✓ installed {name} ({kind:?}) → {}", plugin_dir.display());
+  ui::success(format!("installed {name} ({kind:?}) → {}", plugin_dir.display()));
 
   // ── 8. Hot-reload to daemon ──────────────────────────────────────────
   if let Ok(mut stream) = crate::ipc::connect().await {
@@ -73,7 +74,7 @@ pub async fn install(source: &str) -> Result<()> {
     let req = crate::ipc_proto::IpcRequest::HotReload { plugin: name.clone() };
     let frame = crate::ipc_proto::encode(&req)?;
     stream.write_all(&frame).await.ok();
-    println!("  ↻ notified daemon to hot-reload {name}");
+    ui::detail(format!("notified daemon to hot-reload {name}"));
   }
 
   Ok(())
