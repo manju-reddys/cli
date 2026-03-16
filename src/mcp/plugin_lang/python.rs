@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-use super::{Finding, prompt, write_file};
+use super::{Finding, select, write_file};
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
@@ -382,15 +382,13 @@ print(json.dumps(all_findings))
 /// Scaffold a new Python plugin project named `name` in the current directory.
 pub fn scaffold(name: &str) -> Result<()> {
     // ── 1. Choose framework ───────────────────────────────────────────────
-    println!("\nChoose a Python MCP framework:");
-    println!("  1) FastMCP      (async, ergonomic — requires mcp[server] + anyio)");
-    println!("  2) Pure Python  (no runtime deps  — manual JSON-RPC over stdio)");
-    let choice = prompt("\nEnter 1 or 2: ")?;
-    let use_fastmcp = match choice.as_str() {
-        "1" => true,
-        "2" => false,
-        other => bail!("invalid choice '{other}' — enter 1 or 2"),
-    };
+    let use_fastmcp = select(
+        "Python MCP framework",
+        &[
+            "FastMCP      (async, ergonomic — requires mcp[server] + anyio)",
+            "Pure Python  (no runtime deps  — manual JSON-RPC over stdio)",
+        ],
+    )? == 0;
 
     // ── 2. Create project directory ───────────────────────────────────────
     let dir = std::path::Path::new(name);

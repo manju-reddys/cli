@@ -99,6 +99,7 @@ hyper = { version = "1.8.1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 futures-util = "0.3.32"
 base64 = "0.22"
+dialoguer = "0.12.0"
 
 # ─── Dev dependencies ─────────────────────────────────────────────────────────
 [dev-dependencies]
