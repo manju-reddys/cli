@@ -1,10 +1,14 @@
 use anyhow::{Context, Result};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::Notify;
 
 use crate::config;
 use crate::daemon::nonce;
 use crate::ipc_proto;
+
+const PLUGIN_IDLE_SECS: u64 = 300; // 5 minutes
+const REAPER_INTERVAL_SECS: u64 = 60;
 
 // ── Shared daemon state ──────────────────────────────────────────────────────
 
@@ -14,6 +18,8 @@ pub struct DaemonState {
   pub start_time: std::time::Instant,
   pub active_connections: std::sync::atomic::AtomicUsize,
   pub loaded_modules: std::sync::atomic::AtomicUsize,
+  /// Tracks last-used timestamp per loaded plugin. Used by the idle reaper.
+  pub plugin_registry: tokio::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
   #[cfg(feature = "daemon")]
   pub engine: crate::daemon::engine::wasm::EngineBundle,
   #[cfg(feature = "daemon")]
@@ -72,6 +78,7 @@ pub async fn run_daemon() -> Result<()> {
     start_time: std::time::Instant::now(),
     active_connections: std::sync::atomic::AtomicUsize::new(0),
     loaded_modules: std::sync::atomic::AtomicUsize::new(0),
+    plugin_registry: tokio::sync::Mutex::new(std::collections::HashMap::new()),
     #[cfg(feature = "daemon")]
     engine: engine_bundle,
     #[cfg(feature = "daemon")]
@@ -79,6 +86,39 @@ pub async fn run_daemon() -> Result<()> {
     #[cfg(feature = "daemon")]
     running_proxies: tokio::sync::Mutex::new(std::collections::HashMap::new()),
   });
+
+  // ── 6b. Idle-plugin reaper ───────────────────────────────────────────
+  // Evicts any plugin not used for PLUGIN_IDLE_SECS (5 min) from the registry.
+  {
+    let state = state.clone();
+    let reaper_shutdown = shutdown.clone();
+    tokio::spawn(async move {
+      let mut interval =
+        tokio::time::interval(std::time::Duration::from_secs(REAPER_INTERVAL_SECS));
+      loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                let mut reg = state.plugin_registry.lock().await;
+                let idle = std::time::Duration::from_secs(PLUGIN_IDLE_SECS);
+                let before = reg.len();
+                reg.retain(|plugin, last_used| {
+                    if last_used.elapsed() < idle {
+                        true
+                    } else {
+                        tracing::info!(plugin, "plugin evicted (idle > {}s)", PLUGIN_IDLE_SECS);
+                        false
+                    }
+                });
+                let evicted = before - reg.len();
+                if evicted > 0 {
+                    state.loaded_modules.fetch_sub(evicted, Ordering::Relaxed);
+                }
+            }
+            _ = reaper_shutdown.notified() => break,
+        }
+      }
+    });
+  }
 
   // ── 6. Bind socket ───────────────────────────────────────────────────
   let socket_path = config::socket_path();
@@ -225,6 +265,14 @@ async fn handle_connection(
     ipc_proto::IpcRequest::Status => handle_status(&mut stream, &state).await,
     ipc_proto::IpcRequest::HotReload { plugin } => {
       tracing::info!(plugin, "hot-reload requested");
+      // Register / refresh plugin so its idle timer resets.
+      {
+        let mut reg = state.plugin_registry.lock().await;
+        let is_new = reg.insert(plugin.clone(), std::time::Instant::now()).is_none();
+        if is_new {
+          state.loaded_modules.fetch_add(1, Ordering::Relaxed);
+        }
+      }
       let resp = ipc_proto::IpcResponse::HotReloaded;
       let frame = ipc_proto::encode_response(&resp)?;
       stream.write_all(&frame).await?;
@@ -232,6 +280,12 @@ async fn handle_connection(
     }
     ipc_proto::IpcRequest::Evict { plugin } => {
       tracing::info!(plugin, "evict requested");
+      {
+        let mut reg = state.plugin_registry.lock().await;
+        if reg.remove(&plugin).is_some() {
+          state.loaded_modules.fetch_sub(1, Ordering::Relaxed);
+        }
+      }
       let resp = ipc_proto::IpcResponse::Evicted;
       let frame = ipc_proto::encode_response(&resp)?;
       stream.write_all(&frame).await?;
@@ -269,6 +323,15 @@ async fn handle_run_mcp(
       return Ok(());
     }
   };
+
+  // Register / refresh plugin in activity registry.
+  {
+    let mut reg = state.plugin_registry.lock().await;
+    let is_new = reg.insert(plugin.to_string(), std::time::Instant::now()).is_none();
+    if is_new {
+      state.loaded_modules.fetch_add(1, Ordering::Relaxed);
+    }
+  }
 
   tracing::info!(plugin, "RunMcp — sending McpReady");
   let resp = ipc_proto::IpcResponse::McpReady;

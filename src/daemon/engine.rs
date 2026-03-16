@@ -137,7 +137,7 @@ pub mod wasm {
     let store_state = StoreState::new(
       manifest.allowed_domains.clone(),
       &creds,
-      32, // 32 MB memory limit per PRD §6.4
+      64, // 64 MB memory limit (min required by some components is ~35 MB)
       stdin,
       stdout,
     )?;
@@ -156,10 +156,31 @@ pub mod wasm {
     // Instantiate
     let instance = bundle.linker.instantiate_async(&mut store, &component).await?;
 
-    // Call the WASI command entry point: `wasi:cli/run@0.2.0#run`
-    // Use TypedFunc for the () -> () signature of WASI commands
-    let func = instance.get_typed_func::<(), ()>(&mut store, "wasi:cli/run@0.2.0#run")?;
-    func.call_async(&mut store, ()).await?;
+    // Traverse the component export tree to reach wasi:cli/run@0.2.0#run.
+    // get_export_index returns a ComponentExportIndex usable with get_typed_func.
+    let iface_idx = instance
+      .get_export_index(&mut store, None, "wasi:cli/run@0.2.0")
+      .ok_or_else(|| anyhow::anyhow!("WASM component missing 'wasi:cli/run@0.2.0' export"))?;
+    let func_idx = instance
+      .get_export_index(&mut store, Some(&iface_idx), "run")
+      .ok_or_else(|| anyhow::anyhow!("'wasi:cli/run@0.2.0' missing 'run' function"))?;
+
+    // WASI command run: () -> result<(), ()>  maps to Rust (Result<(), ()>,)
+    type RunResult = (std::result::Result<(), ()>,);
+    let run_func = instance
+      .get_typed_func::<(), RunResult>(&mut store, func_idx)?;
+
+    let run_result = run_func.call_async(&mut store, ()).await;
+
+    // Flush captured stderr — surfaces Python tracebacks on failure.
+    let stderr_bytes = store.data().stderr_capture.contents();
+    if !stderr_bytes.is_empty() {
+        let stderr_text = String::from_utf8_lossy(&stderr_bytes);
+        tracing::error!(plugin = plugin_name, stderr = %stderr_text, "WASM stderr");
+    }
+
+    let (result,) = run_result?;
+    result.map_err(|()| anyhow::anyhow!("WASM run() returned Err"))?;
 
     Ok(())
   }
