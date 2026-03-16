@@ -133,11 +133,16 @@ pub mod wasm {
     let creds =
       crate::auth::keychain::load_all(plugin_name, &manifest.env_vars).unwrap_or_default();
 
+    // Read memory limit from config; fall back to 64 MB if config is unavailable.
+    let memory_limit_mb = config::Config::load()
+      .map(|c| c.execution.max_memory_mb as u32)
+      .unwrap_or(64);
+
     // Create StoreState with piped stdio + credentials as env vars
     let store_state = StoreState::new(
       manifest.allowed_domains.clone(),
       &creds,
-      64, // 64 MB memory limit (min required by some components is ~35 MB)
+      memory_limit_mb,
       stdin,
       stdout,
     )?;

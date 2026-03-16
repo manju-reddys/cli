@@ -39,9 +39,8 @@ impl Fetcher {
   ) -> rquickjs::Result<String> {
     let domains = self.allowed_domains.clone();
 
-    let is_allowed = if domains.is_empty() {
-      true
-    } else {
+    // Empty allowlist = deny all (matches WASM policy and PRD §8).
+    let is_allowed = !domains.is_empty() && {
       let host = reqwest::Url::parse(&url)
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_lowercase()))
@@ -185,9 +184,8 @@ impl WebSocketFactory {
   ) -> rquickjs::Result<Class<'js, HostWebSocket>> {
     let domains = self.allowed_domains.clone();
 
-    let is_allowed = if domains.is_empty() {
-      true
-    } else {
+    // Empty allowlist = deny all (matches WASM policy and PRD §8).
+    let is_allowed = !domains.is_empty() && {
       // Strip ws:// / wss:// and reuse the same URL host parsing as fetch.
       let http_url = url.replacen("ws://", "http://", 1).replacen("wss://", "https://", 1);
       let host = reqwest::Url::parse(&http_url)
