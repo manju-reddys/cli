@@ -1,8 +1,11 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+pub mod build;
 pub mod install;
 pub mod list;
+pub mod new;
+pub mod plugin_lang;
 pub mod remove;
 pub mod run;
 pub mod update;
@@ -22,6 +25,19 @@ pub enum McpCommand {
   Remove { name: String },
   /// List installed plugins (name, type, version, cache status)
   List,
+  /// Scaffold a new plugin project
+  New {
+    /// Language: python, js, rust, go
+    lang: String,
+    /// Plugin name (prompted if omitted)
+    name: Option<String>,
+  },
+  /// Analyse and compile a plugin to .wasm (run from plugin project directory)
+  Build {
+    /// Project directory (defaults to current directory)
+    #[arg(long, short)]
+    dir: Option<std::path::PathBuf>,
+  },
 }
 
 impl McpCommand {
@@ -39,6 +55,8 @@ impl McpCommand {
       McpCommand::Update { name } => update::update(&name).await,
       McpCommand::Remove { name } => remove::remove(&name).await,
       McpCommand::List => list::list().await,
+      McpCommand::New { lang, name } => new::run(&lang, name.as_deref()).await,
+      McpCommand::Build { dir } => build::run(dir.as_deref()).await,
     }
   }
 }
