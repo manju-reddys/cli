@@ -9,6 +9,7 @@ pub mod new;
 pub mod plugin_lang;
 pub mod remove;
 pub mod run;
+pub mod sign;
 pub mod update;
 
 #[derive(Subcommand)]
@@ -39,6 +40,11 @@ pub enum McpCommand {
     #[arg(long, short)]
     dir: Option<std::path::PathBuf>,
   },
+  /// Sign a plugin binary with your Ed25519 author key; writes craft.sig
+  Sign {
+    /// Path to the plugin binary (.wasm or .js)
+    source: String,
+  },
 }
 
 impl McpCommand {
@@ -58,6 +64,7 @@ impl McpCommand {
       McpCommand::List => list::list().await,
       McpCommand::New { lang, name } => new::run(&lang, name.as_deref()).await,
       McpCommand::Build { dir } => build::run(dir.as_deref()).await,
+      McpCommand::Sign { source } => sign::sign(&source).await,
     }
   }
 }

@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
-use dialoguer::{Input, Password};
+use dialoguer::{Confirm, Input, Password};
 
 use crate::auth::keychain;
 use crate::config::{self, PluginKind, PluginManifest};
 use crate::mcp::craft_config::{AuthMethod, CraftConfig, EnvDecl, EnvKind};
+use crate::signing::{SignatureFile, SIG_FILENAME};
 use crate::ui;
 
 // https://webassembly.github.io/spec/core/binary/modules.html#binary-module
@@ -12,6 +13,7 @@ const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 /// Install a plugin from a local path or URL.
 ///
 /// Steps (PRD §4):
+/// 0. Verify signature (TOFU) / warn if unsigned
 /// 1. Fetch source bytes (local file or HTTPS URL)
 /// 2. Validate plugin name — reject path traversal characters
 /// 3. Detect kind: WASM (magic bytes) or JS (fallback)
@@ -24,6 +26,9 @@ const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 pub async fn install(source: &str) -> Result<()> {
   // ── 1. Fetch source bytes ─────────────────────────────────────────────
   let (bytes, source_display) = fetch_source(source).await?;
+
+  // ── 0. Verify signature (must happen before name/copy so abort is clean) ─
+  let signer_pubkey = verify_signature(source, &bytes).await?;
 
   // ── 2. Derive + validate plugin name ─────────────────────────────────
   let name = derive_name(source)?;
@@ -70,6 +75,7 @@ pub async fn install(source: &str) -> Result<()> {
     source: source_display,
     source_hash: hash,
     version,
+    signer_pubkey,
     env_vars,
     allowed_domains,
   };
@@ -89,6 +95,87 @@ pub async fn install(source: &str) -> Result<()> {
   }
 
   Ok(())
+}
+
+// ─── Signature verification ───────────────────────────────────────────────────
+
+/// Check the signature of the plugin being installed.
+///
+/// Returns `Some(pubkey_hex)` if signed and trusted, `None` if the user
+/// chose to proceed with an unsigned plugin.  Bails on a bad signature.
+async fn verify_signature(source: &str, binary: &[u8]) -> Result<Option<String>> {
+  // URL installs: we can't fetch craft.sig here — skip with a notice.
+  // (Future: fetch <url>.sig alongside the binary.)
+  if is_url(source) {
+    ui::warn("signature verification skipped for URL installs");
+    return Ok(None);
+  }
+
+  let parent = std::path::Path::new(source).parent().unwrap_or(std::path::Path::new("."));
+  let sig_path = parent.join(SIG_FILENAME);
+
+  // ── No signature file ─────────────────────────────────────────────────
+  if !sig_path.exists() {
+    ui::warn("this plugin has no craft.sig — it has not been signed by its author");
+    let proceed = Confirm::new()
+      .with_prompt("install unsigned plugin?")
+      .default(false)
+      .interact()
+      .unwrap_or(false);
+    anyhow::ensure!(proceed, "installation cancelled");
+    return Ok(None);
+  }
+
+  // ── Load and cryptographically verify the signature ───────────────────
+  ui::step("verifying signature…");
+  let sig_file = SignatureFile::load(&sig_path)?;
+
+  // Read config for signing if it exists alongside the binary.
+  let config_path = parent.join("craft.config.yaml");
+  let config_yaml: Option<Vec<u8>> =
+    if config_path.exists() { Some(std::fs::read(&config_path)?) } else { None };
+
+  // Hard abort on bad signature — do not prompt, do not continue.
+  crate::signing::verify(binary, config_yaml.as_deref(), &sig_file)
+    .context("aborting install")?;
+
+  ui::success("signature valid");
+
+  // ── TOFU trust check ──────────────────────────────────────────────────
+  let mut trusted = crate::signing::TrustedKeys::load();
+
+  if trusted.is_trusted(&sig_file.public_key) {
+    // Known key — check if it was originally trusted for a different plugin
+    // (could indicate key reuse or impersonation).
+    if let Some(orig) = trusted.original_plugin(&sig_file.public_key) {
+      let current_name = derive_name(source).unwrap_or_default();
+      if orig != current_name {
+        ui::warn(format!(
+          "this key was previously trusted for '{orig}', now used for '{current_name}'"
+        ));
+      }
+    }
+    ui::detail(format!("trusted key {}…", sig_file.fingerprint()));
+  } else {
+    // Unknown key — TOFU prompt.
+    ui::warn(format!("unknown signer — public key: {}", sig_file.public_key));
+    ui::hint("verify this key matches what the plugin author published before trusting");
+
+    let trust = Confirm::new()
+      .with_prompt("trust this key for future installs?")
+      .default(false)
+      .interact()
+      .unwrap_or(false);
+
+    anyhow::ensure!(trust, "installation cancelled — key not trusted");
+
+    let plugin_name = derive_name(source).unwrap_or_default();
+    trusted.trust(&sig_file.public_key, &plugin_name);
+    trusted.save()?;
+    ui::success(format!("key trusted — stored in ~/.craft/trusted_keys.toml"));
+  }
+
+  Ok(Some(sig_file.public_key.clone()))
 }
 
 // ─── Source fetching ──────────────────────────────────────────────────────────

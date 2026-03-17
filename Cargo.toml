@@ -99,6 +99,9 @@ hyper = { version = "1.8.1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 futures-util = "0.3.32"
 base64 = "0.22"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+hex = "0.4"
 console    = "0.16.3"
 dialoguer  = "0.12.0"
 serde_yaml = "0.9"

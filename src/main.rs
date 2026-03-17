@@ -1,6 +1,7 @@
 mod auth;
 mod cache;
 mod cli;
+mod signing;
 mod ui;
 mod config;
 mod daemon;

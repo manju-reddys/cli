@@ -70,6 +70,10 @@ pub struct PluginManifest {
   /// Plugin version from `craft.config.yaml`, if present.
   #[serde(default)]
   pub version: Option<String>,
+  /// Ed25519 public key (hex) that signed this plugin at install time.
+  /// None means the plugin was installed without a signature.
+  #[serde(default)]
+  pub signer_pubkey: Option<String>,
   /// Env var keys the plugin expects (values stored in OS keychain).
   #[serde(default)]
   pub env_vars: Vec<String>,
