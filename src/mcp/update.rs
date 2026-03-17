@@ -33,9 +33,14 @@ pub async fn update(name: &str) -> Result<()> {
   std::fs::copy(source_path, &dest).with_context(|| format!("copying to {}", dest.display()))?;
 
   // Update manifest with new hash
-  let updated = PluginManifest { source_hash: new_hash, ..manifest };
+  let updated = PluginManifest { source_hash: new_hash.clone(), ..manifest.clone() };
   updated.save()?;
 
+  crate::audit::log(crate::audit::Event::PluginUpdated {
+    name,
+    old_hash: &manifest.source_hash,
+    new_hash: &new_hash,
+  });
   ui::success(format!("updated {name}"));
 
   // Notify daemon

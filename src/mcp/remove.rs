@@ -21,6 +21,7 @@ pub async fn remove(name: &str) -> Result<()> {
   std::fs::remove_dir_all(&plugin_dir)
     .with_context(|| format!("removing {}", plugin_dir.display()))?;
 
+  crate::audit::log(crate::audit::Event::PluginRemoved { name });
   ui::success(format!("removed {name}"));
 
   // Notify daemon to evict from cache

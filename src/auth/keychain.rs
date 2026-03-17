@@ -12,7 +12,9 @@ fn entry(plugin: &str, key: &str) -> Result<Entry> {
 pub fn set(plugin: &str, key: &str, value: &str) -> Result<()> {
   entry(plugin, key)?
     .set_password(value)
-    .with_context(|| format!("storing credential {plugin}/{key}"))
+    .with_context(|| format!("storing credential {plugin}/{key}"))?;
+  crate::audit::log(crate::audit::Event::CredentialSet { plugin, key });
+  Ok(())
 }
 
 pub fn get(plugin: &str, key: &str) -> Result<String> {
@@ -22,7 +24,9 @@ pub fn get(plugin: &str, key: &str) -> Result<String> {
 pub fn delete(plugin: &str, key: &str) -> Result<()> {
   entry(plugin, key)?
     .delete_credential()
-    .with_context(|| format!("deleting credential {plugin}/{key}"))
+    .with_context(|| format!("deleting credential {plugin}/{key}"))?;
+  crate::audit::log(crate::audit::Event::CredentialDeleted { plugin, key });
+  Ok(())
 }
 
 /// Load all credentials for a plugin as (key, value) pairs.
@@ -32,6 +36,7 @@ pub fn load_all(plugin: &str, env_var_names: &[String]) -> Result<Vec<(String, S
     .iter()
     .map(|key| {
       let val = get(plugin, key)?;
+      crate::audit::log(crate::audit::Event::CredentialAccessed { plugin, key });
       Ok((key.clone(), val))
     })
     .collect()

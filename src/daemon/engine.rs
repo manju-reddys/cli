@@ -152,6 +152,12 @@ pub mod wasm {
     // Epoch deadline: 100ms ticks × 10 ticks/sec × timeout_secs
     store.set_epoch_deadline(timeout_secs * 10);
 
+    crate::audit::log(crate::audit::Event::PluginRunStarted {
+      name: plugin_name,
+      kind: "wasm",
+    });
+    let run_start = std::time::Instant::now();
+
     // Set resource limiter
     store.limiter(|state| state);
 
@@ -176,6 +182,7 @@ pub mod wasm {
       .get_typed_func::<(), RunResult>(&mut store, func_idx)?;
 
     let run_result = run_func.call_async(&mut store, ()).await;
+    let duration_ms = run_start.elapsed().as_millis() as u64;
 
     // Flush captured stderr — surfaces Python tracebacks on failure.
     let stderr_bytes = store.data().stderr_capture.contents();
@@ -184,9 +191,43 @@ pub mod wasm {
         tracing::error!(plugin = plugin_name, stderr = %stderr_text, "WASM stderr");
     }
 
-    let (result,) = run_result?;
-    result.map_err(|()| anyhow::anyhow!("WASM run() returned Err"))?;
+    let (result,) = match run_result {
+      Ok(r) => r,
+      Err(e) => {
+        // Distinguish epoch timeout from other traps.
+        let is_timeout = e.to_string().contains("epoch");
+        if is_timeout {
+          crate::audit::log(crate::audit::Event::PluginRunTimeout {
+            name: plugin_name,
+            timeout_secs,
+          });
+        } else {
+          crate::audit::log(crate::audit::Event::PluginRunFailed {
+            name: plugin_name,
+            error: &e.to_string(),
+            duration_ms,
+          });
+        }
+        return Err(e);
+      }
+    };
 
-    Ok(())
+    match result {
+      Ok(()) => {
+        crate::audit::log(crate::audit::Event::PluginRunCompleted {
+          name: plugin_name,
+          duration_ms,
+        });
+        Ok(())
+      }
+      Err(()) => {
+        crate::audit::log(crate::audit::Event::PluginRunFailed {
+          name: plugin_name,
+          error: "WASM run() returned Err",
+          duration_ms,
+        });
+        Err(anyhow::anyhow!("WASM run() returned Err"))
+      }
+    }
   }
 }

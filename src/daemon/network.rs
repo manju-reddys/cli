@@ -49,8 +49,23 @@ impl Fetcher {
     };
 
     if !is_allowed {
+      let domain = reqwest::Url::parse(&url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_string()))
+        .unwrap_or_default();
+      crate::audit::log(crate::audit::Event::NetworkBlocked {
+        plugin: "js",
+        url: &url,
+        domain: &domain,
+      });
       return Err(rquickjs::Error::Exception);
     }
+
+    let domain = reqwest::Url::parse(&url)
+      .ok()
+      .and_then(|u| u.host_str().map(|h| h.to_string()))
+      .unwrap_or_default();
+    crate::audit::log(crate::audit::Event::NetworkAllowed { plugin: "js", domain: &domain });
 
     let client = &self.client;
     let mut req = client.get(&url);
@@ -196,6 +211,16 @@ impl WebSocketFactory {
     };
 
     if !is_allowed {
+      let http_url2 = url.replacen("ws://", "http://", 1).replacen("wss://", "https://", 1);
+      let domain = reqwest::Url::parse(&http_url2)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_string()))
+        .unwrap_or_default();
+      crate::audit::log(crate::audit::Event::NetworkBlocked {
+        plugin: "js",
+        url: &url,
+        domain: &domain,
+      });
       return Err(rquickjs::Error::Exception);
     }
 

@@ -57,7 +57,7 @@ pub enum PluginKind {
 }
 
 /// Per-plugin metadata persisted to `~/.craft/plugins/<name>/manifest.toml`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManifest {
   /// Human-readable plugin name (also the directory name).
   pub name: String,

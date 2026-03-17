@@ -140,6 +140,7 @@ pub async fn run_daemon() -> Result<()> {
     std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
   }
 
+  crate::audit::log(crate::audit::Event::DaemonStarted { pid });
   tracing::info!(path = %socket_path.display(), "daemon listening");
 
   // ── 7. Register signal handler ───────────────────────────────────────
@@ -194,6 +195,10 @@ pub async fn run_daemon() -> Result<()> {
   }
 
   // ── 9. Cleanup ───────────────────────────────────────────────────────
+  crate::audit::log(crate::audit::Event::DaemonStopped {
+    pid,
+    uptime_secs: state.start_time.elapsed().as_secs(),
+  });
   cleanup();
   drop(lock);
   tracing::info!("daemon stopped");

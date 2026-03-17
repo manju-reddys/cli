@@ -81,6 +81,14 @@ pub async fn install(source: &str) -> Result<()> {
   };
   manifest.save()?;
 
+  crate::audit::log(crate::audit::Event::PluginInstalled {
+    name: &name,
+    version: manifest.version.as_deref(),
+    source: &manifest.source,
+    signer_pubkey: manifest.signer_pubkey.as_deref(),
+    hash: &manifest.source_hash,
+  });
+
   ui::success(format!("installed {name} ({kind:?}) → {}", plugin_dir.display()));
 
   // ── 9. Hot-reload to daemon (triggers AOT compilation) ────────────────
@@ -122,7 +130,16 @@ async fn verify_signature(source: &str, binary: &[u8]) -> Result<Option<String>>
       .default(false)
       .interact()
       .unwrap_or(false);
-    anyhow::ensure!(proceed, "installation cancelled");
+    if !proceed {
+      crate::audit::log(crate::audit::Event::PluginSignatureRejected {
+        name: &derive_name(source).unwrap_or_default(),
+        reason: "user declined unsigned install",
+      });
+      anyhow::bail!("installation cancelled");
+    }
+    crate::audit::log(crate::audit::Event::PluginUnsignedAccepted {
+      name: &derive_name(source).unwrap_or_default(),
+    });
     return Ok(None);
   }
 
@@ -136,8 +153,13 @@ async fn verify_signature(source: &str, binary: &[u8]) -> Result<Option<String>>
     if config_path.exists() { Some(std::fs::read(&config_path)?) } else { None };
 
   // Hard abort on bad signature — do not prompt, do not continue.
-  crate::signing::verify(binary, config_yaml.as_deref(), &sig_file)
-    .context("aborting install")?;
+  if let Err(e) = crate::signing::verify(binary, config_yaml.as_deref(), &sig_file) {
+    crate::audit::log(crate::audit::Event::PluginSignatureRejected {
+      name: &derive_name(source).unwrap_or_default(),
+      reason: &e.to_string(),
+    });
+    return Err(e.context("aborting install"));
+  }
 
   ui::success("signature valid");
 
@@ -172,6 +194,10 @@ async fn verify_signature(source: &str, binary: &[u8]) -> Result<Option<String>>
     let plugin_name = derive_name(source).unwrap_or_default();
     trusted.trust(&sig_file.public_key, &plugin_name);
     trusted.save()?;
+    crate::audit::log(crate::audit::Event::KeyTrusted {
+      fingerprint: sig_file.fingerprint(),
+      plugin: &plugin_name,
+    });
     ui::success(format!("key trusted — stored in ~/.craft/trusted_keys.toml"));
   }
 
