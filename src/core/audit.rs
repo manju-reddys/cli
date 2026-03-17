@@ -21,7 +21,7 @@
 //! Credential _values_ are never written.  Key names only.
 
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::OnceLock;
 
 // ─── Session ID ───────────────────────────────────────────────────────────────
@@ -52,35 +52,86 @@ pub enum Event<'a> {
     signer_pubkey: Option<&'a str>,
     hash: &'a str,
   },
-  PluginRemoved { name: &'a str },
-  PluginUpdated { name: &'a str, old_hash: &'a str, new_hash: &'a str },
-  PluginSignatureRejected { name: &'a str, reason: &'a str },
-  PluginUnsignedAccepted { name: &'a str },
+  PluginRemoved {
+    name: &'a str,
+  },
+  PluginUpdated {
+    name: &'a str,
+    old_hash: &'a str,
+    new_hash: &'a str,
+  },
+  PluginSignatureRejected {
+    name: &'a str,
+    reason: &'a str,
+  },
+  PluginUnsignedAccepted {
+    name: &'a str,
+  },
 
   // ── Plugin execution ───────────────────────────────────────────────────
-  PluginRunStarted { name: &'a str, kind: &'a str },
-  PluginRunCompleted { name: &'a str, duration_ms: u64 },
-  PluginRunFailed { name: &'a str, error: &'a str, duration_ms: u64 },
-  PluginRunTimeout { name: &'a str, timeout_secs: u64 },
+  PluginRunStarted {
+    name: &'a str,
+    kind: &'a str,
+  },
+  PluginRunCompleted {
+    name: &'a str,
+    duration_ms: u64,
+  },
+  PluginRunFailed {
+    name: &'a str,
+    error: &'a str,
+    duration_ms: u64,
+  },
+  PluginRunTimeout {
+    name: &'a str,
+    timeout_secs: u64,
+  },
 
   // ── Credentials ────────────────────────────────────────────────────────
-  CredentialAccessed { plugin: &'a str, key: &'a str },
-  CredentialSet { plugin: &'a str, key: &'a str },
-  CredentialDeleted { plugin: &'a str, key: &'a str },
+  CredentialAccessed {
+    plugin: &'a str,
+    key: &'a str,
+  },
+  CredentialSet {
+    plugin: &'a str,
+    key: &'a str,
+  },
+  CredentialDeleted {
+    plugin: &'a str,
+    key: &'a str,
+  },
 
   // ── Network sandbox ────────────────────────────────────────────────────
-  NetworkAllowed { plugin: &'a str, domain: &'a str },
-  NetworkBlocked { plugin: &'a str, url: &'a str, domain: &'a str },
+  NetworkAllowed {
+    plugin: &'a str,
+    domain: &'a str,
+  },
+  NetworkBlocked {
+    plugin: &'a str,
+    url: &'a str,
+    domain: &'a str,
+  },
 
   // ── Sandbox violations ─────────────────────────────────────────────────
-  SandboxMemoryExceeded { plugin: &'a str, limit_mb: u64 },
+  SandboxMemoryExceeded {
+    plugin: &'a str,
+    limit_mb: u64,
+  },
 
   // ── Daemon lifecycle ───────────────────────────────────────────────────
-  DaemonStarted { pid: u32 },
-  DaemonStopped { pid: u32, uptime_secs: u64 },
+  DaemonStarted {
+    pid: u32,
+  },
+  DaemonStopped {
+    pid: u32,
+    uptime_secs: u64,
+  },
 
   // ── Signing / trust ────────────────────────────────────────────────────
-  KeyTrusted { fingerprint: &'a str, plugin: &'a str },
+  KeyTrusted {
+    fingerprint: &'a str,
+    plugin: &'a str,
+  },
 }
 
 impl<'a> Event<'a> {
@@ -198,10 +249,7 @@ pub fn log(event: Event<'_>) {
 
   // Build ordered JSON: standard envelope first, then event-specific fields.
   let mut map = serde_json::Map::new();
-  map.insert(
-    "ts".into(),
-    json!(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
-  );
+  map.insert("ts".into(), json!(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
   map.insert("event".into(), json!(event.name()));
   map.insert("actor".into(), json!(event.actor()));
   map.insert("result".into(), json!(event.result()));
@@ -229,9 +277,7 @@ fn write_line(line: &str) {
 
   // O_APPEND writes are atomic for writes < PIPE_BUF on POSIX (typically
   // 4 KiB) — safe for concurrent CLI and daemon processes on the same file.
-  if let Ok(mut f) =
-    std::fs::OpenOptions::new().create(true).append(true).open(&path)
-  {
+  if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
     let _ = writeln!(f, "{line}");
   }
 }

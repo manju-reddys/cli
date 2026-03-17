@@ -1,17 +1,16 @@
-mod audit;
 mod auth;
-mod cache;
 mod cli;
-mod signing;
-mod ui;
 mod config;
+mod core;
 mod daemon;
 mod error;
 mod github;
-mod ipc;
-mod ipc_proto;
 mod mcp;
 mod proxy;
+
+// Re-export core modules at the crate root so all existing `crate::x` paths
+// throughout the codebase continue to resolve without any other changes.
+pub(crate) use core::{audit, cache, ipc, ipc_proto, signing, ui};
 
 use clap::Parser;
 use cli::Craft;
