@@ -1,0 +1,149 @@
+<svg width="100%" viewBox="0 0 680 740">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<!-- ── LLM AGENT (external, top) ─────────────────────────────────── -->
+<g class="node c-purple" onclick="sendPrompt('How does the LLM agent invoke craft mcp?')">
+  <rect x="220" y="30" width="240" height="52" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="50" text-anchor="middle" dominant-baseline="central">LLM agent</text>
+  <text class="ts" x="340" y="68" text-anchor="middle" dominant-baseline="central">craft mcp jira-connector</text>
+</g>
+
+<!-- spawn arrow down -->
+<line x1="340" y1="82" x2="340" y2="116" class="arr" stroke="#534AB7" marker-end="url(#arrow)"/>
+<text class="ts" x="352" y="103" dominant-baseline="central">new process</text>
+
+<!-- ── CRAFT BINARY boundary ──────────────────────────────────────── -->
+<rect x="40" y="120" width="600" height="570" rx="14" fill="none" stroke="var(--b)" stroke-width="0.5" stroke-dasharray="6 4"/>
+<text class="ts" x="56" y="140" dominant-baseline="central">craft binary  (single executable, 15–25 MB)</text>
+
+<!-- ── CLI CLIENT ─────────────────────────────────────────────────── -->
+<g class="node c-gray" onclick="sendPrompt('What does the craft CLI client do?')">
+  <rect x="200" y="148" width="280" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="167" text-anchor="middle" dominant-baseline="central">CLI client</text>
+  <text class="ts" x="340" y="185" text-anchor="middle" dominant-baseline="central">stdio pipe · lazy daemon boot</text>
+</g>
+
+<!-- IPC connect arrow right -->
+<line x1="480" y1="176" x2="540" y2="176" class="arr" stroke="#888780" marker-end="url(#arrow)"/>
+<text class="ts" x="509" y="168" text-anchor="middle">IPC</text>
+
+<!-- daemon sock label -->
+<text class="ts" x="563" y="196" text-anchor="middle">daemon.sock</text>
+<text class="ts" x="563" y="210" text-anchor="middle">0600</text>
+
+<!-- arrow back left (response) -->
+<line x1="540" y1="190" x2="480" y2="190" class="arr" stroke="#888780" marker-end="url(#arrow)"/>
+
+<!-- ── DAEMON container ───────────────────────────────────────────── -->
+<g class="c-teal">
+  <rect x="60" y="234" width="560" height="420" rx="12" stroke-width="0.5"/>
+  <text class="th" x="340" y="260" text-anchor="middle" dominant-baseline="central">background daemon</text>
+  <text class="ts" x="340" y="276" text-anchor="middle" dominant-baseline="central">persistent · per-user · auto-shutdown after 5 min idle</text>
+</g>
+
+<!-- ── GLOBAL INIT row ────────────────────────────────────────────── -->
+<g class="node c-teal" onclick="sendPrompt('How does wasmtime engine initialization work?')">
+  <rect x="80" y="290" width="178" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="169" y="310" text-anchor="middle" dominant-baseline="central">wasmtime engine</text>
+  <text class="ts" x="169" y="328" text-anchor="middle" dominant-baseline="central">shared · AOT linker</text>
+</g>
+
+<g class="node c-teal" onclick="sendPrompt('What is the rquickjs runtime?')">
+  <rect x="278" y="290" width="164" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="360" y="310" text-anchor="middle" dominant-baseline="central">rquickjs runtime</text>
+  <text class="ts" x="360" y="328" text-anchor="middle" dominant-baseline="central">shared · JS/TS exec</text>
+</g>
+
+<g class="node c-teal" onclick="sendPrompt('How does the module cache work?')">
+  <rect x="462" y="290" width="138" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="531" y="310" text-anchor="middle" dominant-baseline="central">module cache</text>
+  <text class="ts" x="531" y="328" text-anchor="middle" dominant-baseline="central">.cwasm · read-only</text>
+</g>
+
+<!-- divider -->
+<line x1="80" y1="358" x2="600" y2="358" stroke="var(--b)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<text class="ts" x="340" y="371" text-anchor="middle">ephemeral per connection — created on connect, dropped on disconnect</text>
+
+<!-- ── EPHEMERAL WASM row ──────────────────────────────────────────── -->
+<g class="node c-gray" onclick="sendPrompt('What is an ephemeral wasmtime Store?')">
+  <rect x="80" y="382" width="160" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="160" y="402" text-anchor="middle" dominant-baseline="central">wasmtime Store</text>
+  <text class="ts" x="160" y="420" text-anchor="middle" dominant-baseline="central">fresh · 32 MB ceiling</text>
+</g>
+
+<g class="node c-gray" onclick="sendPrompt('How is WasiCtx configured per call?')">
+  <rect x="260" y="382" width="160" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="340" y="402" text-anchor="middle" dominant-baseline="central">WasiCtx</text>
+  <text class="ts" x="340" y="420" text-anchor="middle" dominant-baseline="central">stdio · env · credentials</text>
+</g>
+
+<g class="node c-gray" onclick="sendPrompt('What does an ephemeral JS context look like?')">
+  <rect x="440" y="382" width="160" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="520" y="402" text-anchor="middle" dominant-baseline="central">JS AsyncContext</text>
+  <text class="ts" x="520" y="420" text-anchor="middle" dominant-baseline="central">fetch · WebSocket injected</text>
+</g>
+
+<!-- ── NETWORK PROXY row ──────────────────────────────────────────── -->
+<g class="node c-teal" onclick="sendPrompt('How does WASI HTTP proxying work?')">
+  <rect x="80" y="454" width="198" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="179" y="474" text-anchor="middle" dominant-baseline="central">WASI HTTP proxy</text>
+  <text class="ts" x="179" y="492" text-anchor="middle" dominant-baseline="central">reqwest · domain allowlist</text>
+</g>
+
+<g class="node c-teal" onclick="sendPrompt('How does WASI TCP sockets work for databases?')">
+  <rect x="298" y="454" width="164" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="380" y="474" text-anchor="middle" dominant-baseline="central">WASI sockets</text>
+  <text class="ts" x="380" y="492" text-anchor="middle" dominant-baseline="central">TCP/TLS · DB drivers</text>
+</g>
+
+<g class="node c-teal" onclick="sendPrompt('How does the API proxy HTTP server work?')">
+  <rect x="482" y="454" width="118" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="541" y="474" text-anchor="middle" dominant-baseline="central">API proxy</text>
+  <text class="ts" x="541" y="492" text-anchor="middle" dominant-baseline="central">127.0.0.1 HTTP</text>
+</g>
+
+<!-- ── CREDENTIAL STORE ───────────────────────────────────────────── -->
+<g class="node c-gray" onclick="sendPrompt('How are credentials stored and injected?')">
+  <rect x="80" y="526" width="520" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="340" y="546" text-anchor="middle" dominant-baseline="central">credential broker</text>
+  <text class="ts" x="340" y="564" text-anchor="middle" dominant-baseline="central">OS keychain → injected as env vars per call · never cached in heap</text>
+</g>
+
+<!-- ── FILESYSTEM row ─────────────────────────────────────────────── -->
+<g class="node c-gray" onclick="sendPrompt('What is in ~/.craft/cache/?')">
+  <rect x="80" y="598" width="148" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="154" y="618" text-anchor="middle" dominant-baseline="central">~/.craft/cache</text>
+  <text class="ts" x="154" y="636" text-anchor="middle" dominant-baseline="central">.cwasm · 0700</text>
+</g>
+
+<g class="node c-gray" onclick="sendPrompt('What is stored in the plugin manifest?')">
+  <rect x="248" y="598" width="164" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="330" y="618" text-anchor="middle" dominant-baseline="central">plugin manifest</text>
+  <text class="ts" x="330" y="636" text-anchor="middle" dominant-baseline="central">domains · env_vars · hash</text>
+</g>
+
+<g class="node c-gray" onclick="sendPrompt('What is the daemon PID file used for?')">
+  <rect x="432" y="598" width="168" height="52" rx="6" stroke-width="0.5"/>
+  <text class="th" x="516" y="618" text-anchor="middle" dominant-baseline="central">daemon.pid / .lock</text>
+  <text class="ts" x="516" y="636" text-anchor="middle" dominant-baseline="central">crash detection · singleton</text>
+</g>
+
+<!-- ── LEGEND ─────────────────────────────────────────────────────── -->
+<g class="c-teal">
+  <rect x="80" y="666" width="12" height="12" rx="2" stroke-width="0.5"/>
+</g>
+<text class="ts" x="98" y="672" dominant-baseline="central">shared / persistent</text>
+<g class="c-gray">
+  <rect x="220" y="666" width="12" height="12" rx="2" stroke-width="0.5"/>
+</g>
+<text class="ts" x="238" y="672" dominant-baseline="central">ephemeral / file state</text>
+<g class="c-purple">
+  <rect x="372" y="666" width="12" height="12" rx="2" stroke-width="0.5"/>
+</g>
+<text class="ts" x="390" y="672" dominant-baseline="central">external caller</text>
+
+</svg>

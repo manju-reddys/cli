@@ -1,0 +1,68 @@
+craft/
+├── Cargo.toml               ← workspace crates, [features] daemon = [wasmtime, rquickjs, ...], release profile
+├── rust-toolchain.toml      ← pins 1.94 stable
+└── src/
+    ├── main.rs              ← tokio entry, mod declarations
+    ├── cli.rs               ← clap subcommand tree
+    ├── config.rs            ← ~/.craft/ paths + config.toml structs
+    ├── error.rs             ← CraftError + JSON-RPC error writer
+    ├── ipc.rs               ← connect(), nonce handshake, daemon spawn/crash-recovery
+    ├── mcp/
+    │   ├── mod.rs           ← McpCommand enum
+    │   ├── install.rs       ← AOT compile + credential prompting
+    │   ├── update.rs
+    │   ├── remove.rs
+    │   ├── list.rs
+    │   └── run.rs           ← hot path: connect → tunnel stdio
+    ├── github/
+    │   ├── mod.rs
+    │   ├── repos.rs         ← octocrab
+    │   ├── pulls.rs         ← octocrab
+    │   └── auth.rs          ← token prompt → keychain
+    ├── auth/
+    │   ├── mod.rs
+    │   ├── github.rs        ← device flow stub
+    │   ├── m365.rs          ← PKCE stub
+    │   └── keychain.rs      ← set/delete/list credentials
+    ├── proxy/
+    │   ├── mod.rs
+    │   ├── start.rs
+    │   ├── stop.rs
+    │   └── status.rs
+    └── daemon/
+        ├── mod.rs           ← DaemonCommand
+        ├── server.rs        ← run_daemon(), stop, status, logs
+        ├── engine.rs        ← wasmtime Engine+Linker init          } both #[cfg(feature="daemon")]
+        ├── js.rs            ← AsyncRuntime (shared) + AsyncContext   } dispatched based on plugin type
+        ├── handler.rs       ← StoreState, WasiHttpView + domain allowlist
+        ├── nonce.rs         ← generate/write/verify 32-byte nonce
+        └── network.rs       ← JS fetch + HTTP + WebSocket injection (injected into AsyncContext)
+
+
+Key crate choices:
+
+Need                    Crate
+─────────────────────────────────────────────────────
+CLI parsing             clap 4 (derive)
+IPC cross-platform      interprocess 2
+OS keychain             keyring 3
+Masked input            rpassword 7
+WASM runtime            wasmtime 27 + wasmtime-wasi + wasmtime-wasi-http  ← daemon feature
+JS engine               rquickjs 0.8                                       ← daemon feature
+HTTP proxy              reqwest 0.12 (rustls, no OpenSSL)
+WebSocket proxy         tokio-tungstenite 0.24
+GitHub API              octocrab 0.44
+M365 OAuth              oauth2 4
+Hashing                 blake3 1
+Progress bars           indicatif 0.17
+
+Cargo.toml features:
+  [features]
+  default = []
+  daemon  = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:rquickjs"]
+
+Plugin type dispatch (daemon/handler.rs):
+  match plugin.kind {
+      PluginKind::Wasm => engine::run_wasm(&state, tool, socket).await,
+      PluginKind::Js   => js::run_js(&state, tool, socket).await,
+  }

@@ -1,0 +1,20 @@
+name: "{{agent_name}}"
+version: "0.1.0"
+description: ""
+author: ""
+
+# Tools this agent is permitted to use.
+tools: []
+
+# MCP's this agent is permitted to use.
+mcp: []
+
+# Environment variables the agent requires at runtime.
+env: []
+
+# Restrict agent file access to these paths (glob patterns).
+allowed_paths:
+  - "./**"
+
+# Shell commands the agent may run.
+allowed_commands: []

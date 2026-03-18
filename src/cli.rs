@@ -1,7 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::{auth, cache, config, daemon, github, mcp, proxy, ui};
+use crate::{agents, auth, cache, config, daemon, github, mcp, proxy, ui};
 
 /// craft — MCP host and API proxy CLI
 #[derive(Parser)]
@@ -54,6 +56,36 @@ pub enum Command {
     #[command(subcommand)]
     cmd: CacheCommand,
   },
+
+  /// Scaffold a new agent, skill, or workflow
+  Create {
+    /// Scaffold a new agent with the given name
+    #[arg(long, value_name = "NAME")]
+    agent: Option<String>,
+    /// Directory to create the scaffold in (default: current directory)
+    #[arg(long, default_value = ".")]
+    out: PathBuf,
+  },
+
+  /// Add an agent, skill, or workflow to the current project
+  Add {
+    /// Agent package name or path to add
+    #[arg(long, value_name = "NAME")]
+    agent: Option<String>,
+    /// Target project root (default: current directory)
+    #[arg(long, default_value = ".")]
+    project: PathBuf,
+  },
+
+  /// Prepare the agent/skill/workflow in the current directory
+  Prepare {
+    /// Prepare the agent in the current directory
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    agent: bool,
+    /// Target project root (default: current directory)
+    #[arg(long, default_value = ".")]
+    project: PathBuf,
+  },
 }
 
 #[derive(Subcommand)]
@@ -85,6 +117,28 @@ impl Craft {
       Command::Cache { cmd } => match cmd {
         CacheCommand::Clean { plugin } => cache::clean(plugin.as_deref()).await,
       },
+      Command::Create { agent, out } => match agent {
+        Some(name) => agents::AgentAction::Create { name, out }.run(),
+        None => {
+          ui::warn("specify what to create — e.g. --agent <name>");
+          Ok(())
+        }
+      },
+      Command::Add { agent, project } => match agent {
+        Some(name) => agents::AgentAction::Add { name, project }.run(),
+        None => {
+          ui::warn("specify what to add — e.g. --agent <name>");
+          Ok(())
+        }
+      },
+      Command::Prepare { agent, project } => {
+        if agent {
+          agents::AgentAction::Prepare { project }.run()
+        } else {
+          ui::warn("specify what to prepare — e.g. --agent");
+          Ok(())
+        }
+      }
     }
   }
 }

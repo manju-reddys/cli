@@ -1,0 +1,111 @@
+┌─────────────────────────────────────────────────────────────────────┐
+│                         LLM AGENT                            │
+│          craft mcp jira-connector  (new OS process per call) │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ spawn + stdio pipe
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  craft binary  (single executable · 15–25 MB)                │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  CLI CLIENT  (client mode)                                   │ │
+│  │                                                              │ │
+│  │  1. connect() ──► daemon.sock (0600)                        │ │
+│  │       │ refused?                                             │ │
+│  │       └──► spawn daemon ──► poll 10× / 20 ms               │ │
+│  │                timeout? ──► write JSON-RPC error, exit      │   │
+│  │                                                              │   │
+│  │  2. tunnel: stdin ──► IPC ──► stdout   (dumb pipe)          │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                         │ IPC (Unix socket / named pipe)             │
+│  ┌──────────────────────▼───────────────────────────────────────┐   │
+│  │  BACKGROUND DAEMON  (detached · auto-exit after 5 min idle)  │   │
+│  │                                                              │   │
+│  │  ── shared / persistent ──────────────────────────────────  │   │
+│  │                                                              │   │
+│  │  ┌─────────────────┐  ┌──────────────┐  ┌───────────────┐  │   │
+│  │  │ wasmtime engine │  │ rquickjs     │  │ module cache  │  │   │
+│  │  │ + AOT linker    │  │ AsyncRuntime │  │ .cwasm × N    │  │   │
+│  │  │ ~2 MB           │  │ ~1 MB        │  │ ~150 KB each  │  │   │
+│  │  └────────┬────────┘  └──────┬───────┘  └───────────────┘  │   │
+│  │           │                  │                               │   │
+│  │  ── ephemeral per connection ─────────────────────────────  │   │
+│  │           │                  │                               │   │
+│  │  ┌────────▼────────┐  ┌──────▼───────┐                      │   │
+│  │  │ wasmtime Store  │  │ JS           │  (dropped on EOF)     │   │
+│  │  │ WasiCtx         │  │ AsyncContext │                       │   │
+│  │  │ Instance        │  │              │                       │   │
+│  │  │ 32 MB ceiling   │  │ fetch / WS   │                       │   │
+│  │  └────────┬────────┘  └──────┬───────┘                      │   │
+│  │           │                  │                               │   │
+│  │  ── network proxy ────────────────────────────────────────  │   │
+│  │           │                  │                               │   │
+│  │  ┌────────▼──────────────────▼──────┐  ┌─────────────────┐  │   │
+│  │  │ WASI HTTP  (reqwest)              │  │ API proxy       │  │   │
+│  │  │ WASI sockets  (TCP/TLS)           │  │ 127.0.0.1:740x  │  │   │
+│  │  │ domain allowlist enforced         │  │ HTTP mode       │  │   │
+│  │  └───────────────────────────────────┘  └─────────────────┘  │   │
+│  │                                                              │   │
+│  │  ── credential broker ────────────────────────────────────  │   │
+│  │                                                              │   │
+│  │  ┌────────────────────────────────────────────────────────┐ │   │
+│  │  │ OS keychain  (Keychain / DPAPI / libsecret)             │ │   │
+│  │  │ loaded fresh per call ──► injected as env vars          │ │   │
+│  │  └────────────────────────────────────────────────────────┘ │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ── filesystem state ───────────────────────────────────────────    │
+│                                                                      │
+│  ~/.craft/cache/     .cwasm files  (0700 · BLAKE3 verified)         │
+│  ~/.craft/plugins/   manifest.toml  (domains · env_vars · hash)     │
+│  ~/.craft/daemon.pid / daemon.lock  (crash detection · singleton)   │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+REQUEST FLOW  (craft mcp jira-connector)
+─────────────────────────────────────────────────────────────────────
+
+ LLM agent
+    │
+    │  spawn new OS process
+    ▼
+ CLI client
+    │
+    ├─► connect() to daemon.sock
+    │       │
+    │       ├── [connected] ──────────────────────────────────────────┐
+    │       │                                                          │
+    │       └── [refused] ──► check daemon.pid                        │
+    │               │                                                  │
+    │               ├── stale/dead ──► delete lock ──► spawn daemon   │
+    │               │                     poll 10× / 20 ms ───────────┤
+    │               │                     timeout ──► JSON-RPC error  │
+    │               │                                retry: true      │
+    │               └── (crash recovery path)                         │
+    │                                                                  │
+    ◄──────────────────────────────────────────────────────────────────┘
+    │
+    │  IPC connected
+    ▼
+ Daemon  ──► lookup module cache
+    │            │
+    │            └── [not found] ──► JSON-RPC error  retry: false
+    │
+    ├──► load credentials from OS keychain
+    │
+    ├──► create ephemeral Store + WasiCtx
+    │         inject credentials as env vars
+    │         bind stdin/stdout to IPC pipes
+    │         set 32 MB memory limit
+    │         set 30 s epoch timeout
+    │
+    ├──► instantiate module ──► call _start()
+    │         │
+    │         ├── [WASM trap / timeout] ──► JSON-RPC error  retry: true
+    │         │
+    │         └── [runs] ──► JSON-RPC over stdio ──► LLM reads response
+    │
+    └──► client EOF
+              Store + Instance drop  (RAM freed immediately)
+              idle timer updated
+              [5 min no connections] ──► daemon exits

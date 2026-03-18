@@ -107,7 +107,7 @@ pub struct OauthConfig {
 pub fn load(path: &std::path::Path) -> Result<CraftConfig> {
   let raw =
     std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-  serde_yaml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
+  serde_yml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
 }
 
 /// Reject plugin names that could escape `~/.craft/plugins/` via path traversal.
